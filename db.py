@@ -74,13 +74,6 @@ class DatabaseConnection:
         with closing(self.conn.cursor()) as cursor:
             for job_listing in job_listings:
                 try:
-                    # self.logger.log(f"""
-                    #     INSERT INTO '{self.TABLE_NAME}'
-                    #     {DatabaseConnection._format_columns()}
-                    #     VALUES
-                    #     {DatabaseConnection._escaped_values(10)}
-                    # """)
-                    # self.logger.log(DatabaseConnection._format_job_listing(job_listing))
                     cursor.execute(f"""
                         INSERT INTO '{self.TABLE_NAME}'
                         {DatabaseConnection._format_columns()}
