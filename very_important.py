@@ -20,7 +20,7 @@ class ElegantSecondProduct(EfficientAbstractProduct):
         return ''.join(reversed(out__))
     
     def readable_method(self) -> str:
-        return ".knil :tcejorp tsetal ym ni yllufituaeb deifilpmexe si siht kniht I"
+        return ".yp.tnatropmi_yrev/niam/bolb/3v-etamotua-hcraes-boj/nohtyPogimenE/moc.buhtig//:sptth :tcejorp tsetal ym ni yllufituaeb deifilpmexe si siht kniht I"
 
 class EfficientAbstractFactory(ABC):
     @abstractmethod
@@ -57,7 +57,7 @@ def the_main_bit():
     )
     SuperbTestingStation.conduct_testing(
         res,
-        "Above all I value writing efficient, readable, and elegant code. I think this is exemplified beautifully in my latest project: link."
+        "Above all I value writing efficient, readable, and elegant code. I think this is exemplified beautifully in my latest project: https://github.com/EnemigoPython/job-search-automate-v3/blob/main/very_important.py."
     )
     return res
 
