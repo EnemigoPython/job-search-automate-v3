@@ -10,8 +10,8 @@ class AbstractWebsite(ABC):
     """
 
     # generic checks to apply when scraping job listings
-    title_checks = ('Python', 'C#', 'Javascript', 'Backend', 'Junior', 'Graduate', 'DevOps', 'Software')
-    negative_title_checks = ('C++', 'Go', 'Golang', 'Rust', 'Chinese', 'Turkish')
+    title_checks = ('Python', 'C#', '.NET', 'Javascript', 'Backend', 'Junior', 'Graduate', 'DevOps', 'Software')
+    negative_title_checks = ('C++', 'Go', 'Golang', 'Rust', 'Chinese', 'Turkish', 'Java')
     location_checks = ('London', 'Oxford', 'Cambridge')
 
     def __init__(
@@ -184,9 +184,6 @@ class Indeed(AbstractWebsite):
         link = job_table.find('a')['href']
         location = job_table.find_all('p')[1].get_text().strip()
         salary = self.extract_salary(job_table.get_text())
-        # # truncate salary to 'X a year'
-        # if salary:
-        #     salary = re.split(r'([A-Z])', salary)[0]
         job_listing = JobListing(
             job_title,
             company,
@@ -327,4 +324,31 @@ class CVJobs(AbstractWebsite):
     
     def find_jobs(self, message: Message):
         html = self.parse_message_html(message)
-        print(self.name)
+        job_sections: list[NavigableString|Tag] = html.find('table').find_all('article')
+        for job_section in job_sections:
+            a_tag = job_section.find('a')
+            job_title = a_tag.get_text().strip().replace('\ufeff', '')
+            link = a_tag['href']
+            p_tags = job_section.find_all('p')
+            if len(p_tags) < 2:
+                continue
+            p_text = [p.get_text() for p in p_tags]
+            if len(p_tags) == 3:
+                salary = p_text[0]
+                location = p_text[1]
+                description = p_text[2]
+            else:
+                salary = None
+                location = p_text[0]
+                description = p_text[1]
+            job_listing = JobListing(
+                job_title,
+                None,
+                location,
+                salary,
+                self.name,
+                link,
+                description,
+                False
+            )
+            self.jobs.append(job_listing)
