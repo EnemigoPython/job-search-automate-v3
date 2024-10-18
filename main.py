@@ -2,6 +2,8 @@ import re
 from simplegmail import Gmail
 from simplegmail.message import Message
 from simplegmail.query import construct_query
+from websites import AbstractWebsite, LinkedIn, Indeed, \
+    IndeedBlock, ExecutiveJobs, CVJobs
 
 # HREF_PATTERN = r'href\s*=\s*["\']?([^"\'\s>]+)'
 # HREF_PATTERN = r'href\s*=\s*["\']?([^"\'\s>]+)["\']?\s*>(?:\s*)I\'m interested'
@@ -12,30 +14,43 @@ def init_gmail_client():
     return Gmail(client_secret_file="credentials.json")
 
 
-def get_job_alert_mail(gmail: Gmail):
+def get_alert_emails(websites: list[AbstractWebsite]) -> list[str]:
+    """
+    Retrieve the email string for each website being used in the session
+    """
+    return [w.alert_email for w in websites]
 
-    indeed_params = {
-        'sender': 'invitetoapply@indeed.com',
-        'newer_than': (5, "day"),
-        # 'unread': True
-    }
-    linkedin_params = {
-        'sender': 'jobs-noreply@linkedin.com',
-        'newer_than': (5, "day")
-    }
-    messages = gmail.get_messages(query=construct_query(
-        indeed_params,
-        linkedin_params
-    ))
+
+def get_job_alert_mail(gmail: Gmail, emails: list[str]):
+    """
+    Construct a query to retrieve all messages from session email addresses
+    """
+    query_params = []
+    for email in emails:
+        query_params.append({
+            'sender': email,
+            'newer_than': (5, "day")
+        })
+    messages = gmail.get_messages(query=construct_query(*query_params))
     print(messages)
     return messages
 
+
+def sort_messages(messages: list[Message], websites: list[AbstractWebsite]):
+    """
+    Sort and filter messages to the correct website wrapper
+    """
+    for message in messages:
+        for website in websites:
+            if website.combined_filter(message):
+                website.messages.append(message)
+                continue
 
 def filter_indeed_message(message: Message):
     '''
     Attempt to filter for only jobs that we should bother applying for
     '''
-    title_checks = ('Python', 'C#', 'Javascript', 'Backend', 'Junior', 'Graduate')
+    title_checks = ('Python', 'C#', 'Javascript', 'Backend', 'Junior', 'Graduate', 'Software')
     location_checks = ('London', 'Oxford', 'Cambridge')
     # print(f'Subject: {any(i in message.subject for i in title_checks)}')
     # print(f'Location: {any(i in message.plain for i in location_checks)}')
@@ -49,21 +64,41 @@ def get_indeed_links(messages: list[Message]):
     return [r.group(1) for r in res if r is not None]
 
 
-def get_linkedin_links(messages: list[Message]):
-    href_pattern = r'https://www\.linkedin\.com/comm/jobs/view/\S+'
-    res = [re.findall(href_pattern, m.html) for m in messages]
-    return res
-
-
 def main():
     gmail = init_gmail_client()
-    messages = get_job_alert_mail(gmail)
+    # initialise website class wrappers
+    websites: list[AbstractWebsite] = [
+        LinkedIn(),
+        Indeed(),
+        IndeedBlock(),
+        ExecutiveJobs(),
+        CVJobs()
+    ]
+    emails = get_alert_emails(websites)
+    messages = get_job_alert_mail(gmail, emails)
+    # TODO: filter seen before messages
+    sort_messages(messages, websites)
+    for website in websites:
+        print(f'\n\n{website} {len(website.messages)}: \n{website.messages}')
+        website.find_all_jobs()
+        for job in website.jobs:
+            print(job.company, job.title, job.location)
+    return
+
+
+
     indeed_messages = [m for m in messages if m.sender.split()[0] == "Indeed" and filter_indeed_message(m)]
     linkedin_messages = [m for m in messages if m.sender.split()[0] == "LinkedIn"]
-    indeed_links = get_indeed_links(indeed_messages)
-    print(indeed_links)
-    linkedin_links = get_linkedin_links(linkedin_messages)
-    print(linkedin_links)
+    exec_messages = [m for m in messages if m.sender.split()[0] == "Executive"]
+    cv_messages = [m for m in messages if m.sender.split()[0] == "CV-Library"]
+    # print(len(messages))
+    # print(len(linkedin_messages))
+    # print(len(indeed_messages))
+    # print(len(exec_messages))
+    # print(len(cv_messages))
+    
+    # indeed_links = get_indeed_links(indeed_messages)
+    # print(indeed_links)
 
 
 if __name__ == '__main__':

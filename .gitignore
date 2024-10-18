@@ -1,4 +1,6 @@
+__pycache__
 .venv
 credentials.json
 gmail_token.json
 token.json
+test.py
