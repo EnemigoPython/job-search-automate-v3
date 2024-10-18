@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from simplegmail.message import Message
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag, NavigableString
 from jobs import JobListing
-from itertools import zip_longest
 import re
 
 class AbstractWebsite(ABC):
@@ -277,13 +276,41 @@ class ExecutiveJobs(AbstractWebsite):
     def multiple_listings(self):
         return True
     
-    @property
-    def automatable(self):
-        return False
-    
     def find_jobs(self, message: Message):
         html = self.parse_message_html(message)
-        print(self.name)
+        job_table = html.find('table').find('table').find_all('tr')[1].find('td')
+        sections: list[NavigableString|Tag] = job_table.children
+        new_listing = True
+        job_title = ""
+        location = ""
+        link = ""
+        description = ""
+        for section in sections:
+            try:
+                if isinstance(section, Tag) and 'href' in section.attrs.keys():
+                    new_listing = True
+                    if job_title and link and location and description:
+                        job_listing = JobListing(
+                            job_title,
+                            None,
+                            location,
+                            None,
+                            self.name,
+                            link,
+                            description,
+                            False
+                        )
+                        self.jobs.append(job_listing)
+                    job_title = section.get_text()
+                    link = section['href']
+                    description = ""
+                elif new_listing and section.get_text():
+                    location = section.get_text().split("Location: ")[1]
+                    new_listing = False
+                else:
+                    description += section.get_text()
+            except IndexError:
+                continue
 
 class CVJobs(AbstractWebsite):
     @property

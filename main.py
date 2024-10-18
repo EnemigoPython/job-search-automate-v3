@@ -4,6 +4,8 @@ from simplegmail.query import construct_query
 from websites import AbstractWebsite, LinkedIn, Indeed, \
     IndeedBlock, ExecutiveJobs, CVJobs
 
+__version__ = 0.1
+
 
 def init_gmail_client():
     return Gmail(client_secret_file="credentials.json")
@@ -60,8 +62,8 @@ def main():
         print(f'\n\n{website} {len(website.messages)}: \n{website.messages}')
         website.find_all_jobs()
         for job in website.jobs:
-            # print(f'{job.company=}, {job.title=}, {job.location=}, {job.salary=}')
-            print(f'{job.description=}')
+            print(f'{job.company=}, {job.title=}, {job.location=}, {job.salary=}')
+            # print(f'{job.description=}')
 
 
 if __name__ == '__main__':
