@@ -86,6 +86,17 @@ class AbstractWebsite(ABC):
     def parse_message_html(self, message: Message):
         return BeautifulSoup(message.html, 'html.parser')
     
+    def extract_salary(self, text: str) -> str | None:
+        """
+        Extract a salary substring from a given string
+
+        Note: we use `.find` to not exclude a range of salary e.g. "£60K-70K"
+        """
+        if (substr := text.find('£')) != -1:
+            return re.split(r'\s{2,}', text[substr:])[0].replace(')', '').replace('(', '')
+        else:
+            return None
+    
     def find_all_jobs(self):
         """
         Loop through all messages and get job listing info
@@ -119,11 +130,7 @@ class LinkedIn(AbstractWebsite):
         company = listing_elements[1].split(" · ")[0]
         location = listing_elements[1].split(" · ")[1]
         easy_apply = 'Easy Apply' in text
-        # we use `.find` to not exclude a range of salary e.g. "£60K-70K"
-        if (substr := text.find('£')) != -1:
-            salary = re.split(r'\s{2,}', text[substr:])[0].replace(')', '').replace('(', '')
-        else:
-            salary = None
+        salary = self.extract_salary(text)
         return JobListing(
             title, 
             company, 
@@ -170,8 +177,24 @@ class Indeed(AbstractWebsite):
     def find_jobs(self, message: Message):
         job_title, company = message.subject.strip().split(' @ ')
         html = self.parse_message_html(message)
-        print(job_title)
-        print(company)
+        job_table = html.find_all('table')[5]
+        link = job_table.find('a')['href']
+        location = job_table.find_all('p')[1].get_text().strip()
+        salary = self.extract_salary(job_table.get_text())
+        # truncate salary to 'X a year'
+        if salary:
+            salary = re.split(r'([A-Z])', salary)[0]
+        job_listing = JobListing(
+            job_title,
+            company,
+            location,
+            salary,
+            self.name,
+            link,
+            None,
+            False
+        )
+        self.jobs.append(job_listing)
     
 class IndeedBlock(AbstractWebsite):
     @property
