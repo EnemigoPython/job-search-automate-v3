@@ -60,7 +60,8 @@ def main():
         print(f'\n\n{website} {len(website.messages)}: \n{website.messages}')
         website.find_all_jobs()
         for job in website.jobs:
-            print(f'{job.company=}, {job.title=}, {job.location=}, {job.salary=}')
+            # print(f'{job.company=}, {job.title=}, {job.location=}, {job.salary=}')
+            print(f'{job.description=}')
 
 
 if __name__ == '__main__':

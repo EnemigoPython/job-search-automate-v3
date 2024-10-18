@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from simplegmail.message import Message
 from bs4 import BeautifulSoup
 from jobs import JobListing
+from itertools import zip_longest
 import re
 
 class AbstractWebsite(ABC):
@@ -89,13 +90,16 @@ class AbstractWebsite(ABC):
     def extract_salary(self, text: str) -> str | None:
         """
         Extract a salary substring from a given string
-
-        Note: we use `.find` to not exclude a range of salary e.g. "£60K-70K"
         """
+        # We use `.find` to not exclude a range of salary e.g. "£60K-70K"
         if (substr := text.find('£')) != -1:
-            return re.split(r'\s{2,}', text[substr:])[0].replace(')', '').replace('(', '')
+            salary = re.split(r'\s{2,}', text[substr:])[0].replace(')', '').replace('(', '')
         else:
-            return None
+            salary = None
+        # truncate salary to 'X a year'
+        if salary:
+            salary = re.split(r'([A-Z])', salary)[0]
+        return salary
     
     def find_all_jobs(self):
         """
@@ -181,9 +185,9 @@ class Indeed(AbstractWebsite):
         link = job_table.find('a')['href']
         location = job_table.find_all('p')[1].get_text().strip()
         salary = self.extract_salary(job_table.get_text())
-        # truncate salary to 'X a year'
-        if salary:
-            salary = re.split(r'([A-Z])', salary)[0]
+        # # truncate salary to 'X a year'
+        # if salary:
+        #     salary = re.split(r'([A-Z])', salary)[0]
         job_listing = JobListing(
             job_title,
             company,
@@ -209,9 +213,56 @@ class IndeedBlock(AbstractWebsite):
     def multiple_listings(self):
         return False
     
+    def is_valid_float(self, s: str):
+        """
+        Companies with ratings have orphaned td with a float e.g. '3.9'
+        """
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+    
+    def adjust_for_company_rating(self, sections: list[str]):
+        """
+        We are scraping by text index, but some variation throws this off.
+        Jobs with a rating have extra content, so we account for this while indexing.
+        """
+        return 2 if any(self.is_valid_float(s) for s in sections) else 0
+    
+    def get_location(self, sections: list[str]):
+        """
+        In an effort to scrape location properly we have to wrangle the data
+        """
+        location = sections[3 + self.adjust_for_company_rating(sections)]
+        return location.replace('\xa0', ' ')
+
     def find_jobs(self, message: Message):
         html = self.parse_message_html(message)
-        print(self.name)
+        job_table = html.find_all('table')[7]
+        job_sections = job_table.find_all('table')
+        for job_section in job_sections:
+            a_tag = job_section.find('a')
+            if a_tag:
+                job_section_text = [j.get_text() for j in job_section.find_all('td')]
+                job_title = job_section_text[0]
+                company = job_section_text[2]
+                location = self.get_location(job_section_text)
+                description = job_section_text[-2]
+                easy_apply = 'Easily apply' in job_section.get_text()
+                salary = self.extract_salary(job_section.get_text())
+                link = a_tag['href']
+                job_listing = JobListing(
+                    job_title,
+                    company,
+                    location,
+                    salary,
+                    self.name,
+                    link,
+                    description,
+                    easy_apply
+                )
+                self.jobs.append(job_listing)
 
 class ExecutiveJobs(AbstractWebsite):
     @property

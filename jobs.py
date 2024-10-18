@@ -9,4 +9,4 @@ class JobListing:
     website: str
     link: str
     description: str | None
-    linkedin_easy_apply: bool
+    easy_apply: bool
