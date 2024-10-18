@@ -1,0 +1,37 @@
+{
+    "production": false,
+    "log_paths": {
+        "development": "v3_test.log",
+        "production": "v3_prod.log"
+    },
+    "title_checks": [
+        "Python",
+        "Software",
+        "C#",
+        ".NET",
+        "Javascript",
+        "Backend",
+        "Junior",
+        "Graduate",
+        "DevOps"
+    ],
+    "negative_title_checks": [
+        "C++",
+        "Go",
+        "Golang",
+        "Rust",
+        "Chinese",
+        "Turkish",
+        "Java",
+        "C",
+        "Embedded",
+        "Electrical"
+    ],
+    "location_checks": [
+        "London",
+        "Hybrid",
+        "Remote",
+        "Oxford",
+        "Cambridge"
+    ]
+}

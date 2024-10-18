@@ -1,24 +1,26 @@
+import re
 from abc import ABC, abstractmethod
 from simplegmail.message import Message
 from bs4 import BeautifulSoup, Tag, NavigableString
 from jobs import JobListing
-import re
+from log import Logger, LogLevel
+from db import DatabaseConnection
 
 class AbstractWebsite(ABC):
     """
     ABC to be inherited by all websites sending job alerts
     """
-
-    # generic checks to apply when scraping job listings
-    title_checks = ('Python', 'C#', '.NET', 'Javascript', 'Backend', 'Junior', 'Graduate', 'DevOps', 'Software')
-    negative_title_checks = ('C++', 'Go', 'Golang', 'Rust', 'Chinese', 'Turkish', 'Java')
-    location_checks = ('London', 'Oxford', 'Cambridge')
-
     def __init__(
             self, 
+            config: dict,
+            logger: Logger,
+            db: DatabaseConnection,
             messages: list[Message] | None = None, 
             jobs: list[JobListing] | None = None
         ):
+        self.config = config
+        self.logger = logger
+        self.db = db
         if messages is None:
             self.messages = []
         else:
@@ -27,6 +29,9 @@ class AbstractWebsite(ABC):
             self.jobs = []
         else:
             self.jobs = jobs
+        num_messages = len(self.messages)
+        num_jobs = len(self.jobs)
+        self.logger.log(f'Initialised website wrapper: {self}. {num_messages} messages & {num_jobs} jobs.')
         super().__init__()
     
     def __str__(self):
@@ -70,7 +75,7 @@ class AbstractWebsite(ABC):
     
     def quality_filter(self, message: Message) -> bool:
         """
-        Used to filter each message by keywords that indicate a good job match.
+        Used to filter messages by keywords that indicate a good job match.
 
         By default: `True` accepts all messages.
         """
@@ -81,7 +86,6 @@ class AbstractWebsite(ABC):
         Combines both filters as criteria for storing a message
         """
         return self.generic_filter(message) and self.quality_filter(message)
-
     
     def parse_message_html(self, message: Message):
         return BeautifulSoup(message.html, 'html.parser')
@@ -100,12 +104,27 @@ class AbstractWebsite(ABC):
             salary = re.split(r'([A-Z])', salary)[0]
         return salary
     
+    def job_title_filter(self, job_title: str):
+        """
+        Filter applied after job collation to check the job title matches
+        likely prospects.
+        """
+        return any(i in job_title for i in self.config['title_checks']) and \
+            not any(i in job_title for i in self.config['negative_title_checks'])
+    
     def find_all_jobs(self):
         """
         Loop through all messages and get job listing info
         """
+        self.logger.log(f'Finding jobs for {self}...')
         for message in self.messages:
             self.find_jobs(message)
+        all_jobs = len(self.jobs)
+        self.logger.log(f'{all_jobs} found')
+        self.jobs = [j for j in self.jobs if self.job_title_filter(j.title)]
+        discarded_jobs = all_jobs - len(self.jobs)
+        self.logger.log(f'{discarded_jobs} discarded')
+        self.db.save_job_listings(self.jobs)
     
     @abstractmethod
     def find_jobs(self, message: Message):
@@ -139,6 +158,7 @@ class LinkedIn(AbstractWebsite):
             company, 
             location, 
             salary,
+            self.alert_email,
             self.name,
             link,
             None,
@@ -167,15 +187,15 @@ class Indeed(AbstractWebsite):
     
     @property
     def name(self):
-        return "Indeed Individual Listings"
+        return "Indeed"
     
     @property
     def multiple_listings(self):
         return False
     
     def quality_filter(self, message: Message) -> bool:
-        return any(i in message.subject for i in self.title_checks) \
-        and not any(i in message.subject for i in self.negative_title_checks)
+        return any(i in message.subject for i in self.config['title_checks']) \
+        and not any(i in message.subject for i in self.config['negative_title_checks'])
     
     def find_jobs(self, message: Message):
         job_title, company = message.subject.strip().split(' @ ')
@@ -189,6 +209,7 @@ class Indeed(AbstractWebsite):
             company,
             location,
             salary,
+            self.alert_email,
             self.name,
             link,
             None,
@@ -203,7 +224,7 @@ class IndeedBlock(AbstractWebsite):
     
     @property
     def name(self):
-        return "Indeed Block Listings"
+        return "Indeed"
     
     @property
     def multiple_listings(self):
@@ -253,6 +274,7 @@ class IndeedBlock(AbstractWebsite):
                     company,
                     location,
                     salary,
+                    self.alert_email,
                     self.name,
                     link,
                     description,
@@ -292,6 +314,7 @@ class ExecutiveJobs(AbstractWebsite):
                             None,
                             location,
                             None,
+                            self.alert_email,
                             self.name,
                             link,
                             description,
@@ -346,6 +369,7 @@ class CVJobs(AbstractWebsite):
                 None,
                 location,
                 salary,
+                self.alert_email,
                 self.name,
                 link,
                 description,

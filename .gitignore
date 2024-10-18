@@ -4,3 +4,4 @@ credentials.json
 gmail_token.json
 token.json
 test.py
+*.log
