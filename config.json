@@ -4,6 +4,17 @@
         "development": "v3_test.log",
         "production": "v3_prod.log"
     },
+    "session_websites": [
+        "LinkedIn",
+        "Indeed",
+        "IndeedBlock",
+        "ExecutiveJobs",
+        "CVJobs"
+    ],
+    "find_new_jobs": false,
+    "apply_for_jobs": true,
+    "email_check_age": 5,
+    "max_apply_retries": 3,
     "title_checks": [
         "Python",
         "Software",

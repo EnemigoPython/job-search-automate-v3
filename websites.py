@@ -15,52 +15,47 @@ class AbstractWebsite(ABC):
             config: dict,
             logger: Logger,
             db: DatabaseConnection,
-            messages: list[Message] | None = None, 
             jobs: list[JobListing] | None = None
         ):
         self.config = config
         self.logger = logger
         self.db = db
-        if messages is None:
-            self.messages = []
-        else:
-            self.messages = messages
+        self.messages = []
         if jobs is None:
             self.jobs = []
         else:
             self.jobs = jobs
-        num_messages = len(self.messages)
         num_jobs = len(self.jobs)
-        self.logger.log(f'Initialised website wrapper: {self}. {num_messages} messages & {num_jobs} jobs.')
+        self.logger.log(f'Initialised website wrapper: {self} with {num_jobs} jobs.')
         super().__init__()
     
     def __str__(self):
-        return f"{self.name} ({self.alert_email})"
+        return f"{self.name()} ({self.alert_email()})"
 
-    @property
+    @staticmethod
     @abstractmethod
-    def alert_email(self) -> str:
+    def alert_email() -> str:
         """
         The email address the alert comes from.
         """
         ...
     
-    @property
+    @staticmethod
     @abstractmethod
-    def name(self) -> str:
+    def name() -> str:
         """
         The plaintext name of the website.
         """
 
-    @property
+    @staticmethod
     @abstractmethod
-    def multiple_listings(self) -> bool:
+    def multiple_listings() -> bool:
         """
         Do messages contain a single listing or multiple.
         """
 
-    @property
-    def automatable(self) -> bool:
+    @staticmethod
+    def automatable() -> bool:
         """
         Are the website links automatable - we assume yes unless overriden.
         """
@@ -71,7 +66,7 @@ class AbstractWebsite(ABC):
         Used to check if a message came from this website.
         """
         email = message.sender.split("<")[1].split(">")[0]
-        return email == self.alert_email
+        return email == self.alert_email()
     
     def quality_filter(self, message: Message) -> bool:
         """
@@ -134,16 +129,16 @@ class AbstractWebsite(ABC):
         ...
 
 class LinkedIn(AbstractWebsite):
-    @property
-    def alert_email(self):
+    @staticmethod
+    def alert_email():
         return "jobs-listings@linkedin.com"
     
-    @property
-    def name(self):
+    @staticmethod
+    def name():
         return "LinkedIn"
     
-    @property
-    def multiple_listings(self):
+    @staticmethod
+    def multiple_listings():
         return True
     
     def extract_job_listing(self, text: str, link: str):
@@ -158,8 +153,8 @@ class LinkedIn(AbstractWebsite):
             company, 
             location, 
             salary,
-            self.alert_email,
-            self.name,
+            self.alert_email(),
+            self.name(),
             link,
             None,
             easy_apply
@@ -181,16 +176,16 @@ class LinkedIn(AbstractWebsite):
                 continue
 
 class Indeed(AbstractWebsite):
-    @property
-    def alert_email(self):
+    @staticmethod
+    def alert_email():
         return "invitetoapply@indeed.com"
     
-    @property
-    def name(self):
+    @staticmethod
+    def name():
         return "Indeed"
     
-    @property
-    def multiple_listings(self):
+    @staticmethod
+    def multiple_listings():
         return False
     
     def quality_filter(self, message: Message) -> bool:
@@ -209,8 +204,8 @@ class Indeed(AbstractWebsite):
             company,
             location,
             salary,
-            self.alert_email,
-            self.name,
+            self.alert_email(),
+            self.name(),
             link,
             None,
             False
@@ -218,16 +213,16 @@ class Indeed(AbstractWebsite):
         self.jobs.append(job_listing)
     
 class IndeedBlock(AbstractWebsite):
-    @property
-    def alert_email(self):
+    @staticmethod
+    def alert_email():
         return "alert@indeed.com"
     
-    @property
-    def name(self):
+    @staticmethod
+    def name():
         return "Indeed"
     
-    @property
-    def multiple_listings(self):
+    @staticmethod
+    def multiple_listings():
         return False
     
     def is_valid_float(self, s: str):
@@ -274,8 +269,8 @@ class IndeedBlock(AbstractWebsite):
                     company,
                     location,
                     salary,
-                    self.alert_email,
-                    self.name,
+                    self.alert_email(),
+                    self.name(),
                     link,
                     description,
                     easy_apply
@@ -283,16 +278,16 @@ class IndeedBlock(AbstractWebsite):
                 self.jobs.append(job_listing)
 
 class ExecutiveJobs(AbstractWebsite):
-    @property
-    def alert_email(self):
+    @staticmethod
+    def alert_email():
         return "info@executiveplacements.com"
     
-    @property
-    def name(self):
+    @staticmethod
+    def name():
         return "Executive Placement Jobs"
     
-    @property
-    def multiple_listings(self):
+    @staticmethod
+    def multiple_listings():
         return True
     
     def find_jobs(self, message: Message):
@@ -314,8 +309,8 @@ class ExecutiveJobs(AbstractWebsite):
                             None,
                             location,
                             None,
-                            self.alert_email,
-                            self.name,
+                            self.alert_email(),
+                            self.name(),
                             link,
                             description,
                             False
@@ -333,16 +328,16 @@ class ExecutiveJobs(AbstractWebsite):
                 continue
 
 class CVJobs(AbstractWebsite):
-    @property
-    def alert_email(self):
+    @staticmethod
+    def alert_email():
         return "admin@jobs.cv-library.co.uk"
     
-    @property
-    def name(self):
+    @staticmethod
+    def name():
         return "CV-Library"
     
-    @property
-    def multiple_listings(self):
+    @staticmethod
+    def multiple_listings():
         return True
     
     def find_jobs(self, message: Message):
@@ -369,8 +364,8 @@ class CVJobs(AbstractWebsite):
                 None,
                 location,
                 salary,
-                self.alert_email,
-                self.name,
+                self.alert_email(),
+                self.name(),
                 link,
                 description,
                 False

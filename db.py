@@ -1,9 +1,27 @@
 import os
 import sqlite3
+from dataclasses import dataclass, fields
 from contextlib import closing
 from datetime import datetime
 from log import Logger
 from jobs import JobListing
+
+@dataclass
+class DatabaseRow:
+    ID: int
+    logged_timestamp: str
+    title: str
+    company: str | None
+    location: str | None
+    salary: str | None
+    email: str
+    website: str
+    link: str
+    description: str
+    easy_apply: bool
+    applied_timestamp: str | None
+    apply_attempts: int
+    cover_letter: str | None
 
 class DatabaseConnection:
     """
@@ -11,26 +29,13 @@ class DatabaseConnection:
     """
     DB_PATH = os.environ.get('DB_PATH')
     TABLE_NAME = "Job-Search-Automate-v3"
-    COLS = [
-        "logged_timestamp",
-        "title",
-        "company",
-        "location",
-        "salary",
-        "email",
-        "website",
-        "link",
-        "description",
-        "easy_apply",
-        "applied_timestamp",
-        "apply_attempts",
-        "cover_letter"
-    ]  # exclude autoincrement ID
-    insert_cols = COLS[:-3]
+    find_insert_cols = [f.name for f in fields(DatabaseRow)[1:-3]]
 
-    def __init__(self, logger: Logger):
+    def __init__(self, logger: Logger, config: dict):
         self.logger = logger
+        self.config = config
         self.conn = sqlite3.connect(self.DB_PATH)
+        self.conn.row_factory = sqlite3.Row
     
     def __enter__(self):
         self.logger.log(f"Connected to {self.DB_PATH}")
@@ -43,7 +48,7 @@ class DatabaseConnection:
     
     @classmethod
     def _format_columns(cls):
-        return '(' + ', '.join(cls.insert_cols) + ')'
+        return '(' + ', '.join(cls.find_insert_cols) + ')'
     
     @classmethod
     def _escaped_values(cls, n: int):
@@ -53,6 +58,11 @@ class DatabaseConnection:
     def _get_timestamp():
         now = datetime.now()
         return now.strftime('%Y-%m-%d %H:%M:%S') + f',{now.microsecond // 1000:03d}'
+    
+    @staticmethod
+    def _format_emails(emails: list[str]):
+        quoted_emails = [f"'{e}'" for e in emails]
+        return '(' + ', '.join(quoted_emails) + ')'
     
     @staticmethod
     def _format_job_listing(job_listing: JobListing):
@@ -67,6 +77,20 @@ class DatabaseConnection:
             job_listing.link,
             job_listing.description,
             job_listing.easy_apply
+        )
+    
+    @staticmethod
+    def row_to_job_listing(row: DatabaseRow):
+        return JobListing(
+            row.title,
+            row.company,
+            row.location,
+            row.salary,
+            row.email,
+            row.website,
+            row.link,
+            row.description,
+            bool(row.easy_apply)
         )
 
     def save_job_listings(self, job_listings: list[JobListing]):
@@ -85,3 +109,17 @@ class DatabaseConnection:
                     continue
             self.conn.commit()
         self.logger.log(f"{new_entries} rows added")
+    
+    def retrieve_unapplied_jobs(self, emails: list[str]) -> list[JobListing]:
+        max_retries = self.config['max_apply_retries']
+        with closing(self.conn.cursor()) as cursor:
+            query = list(cursor.execute(f"""
+                SELECT * FROM '{self.TABLE_NAME}' 
+                WHERE applied_timestamp IS NULL
+                AND apply_attempts < {max_retries}
+                AND email in {self._format_emails(emails)}
+            """))
+            rows = [DatabaseRow(*i) for i in query]
+            unapplied_jobs = [self.row_to_job_listing(i) for i in rows]
+            self.logger.log(f"{len(unapplied_jobs)} jobs to apply for")
+            return unapplied_jobs

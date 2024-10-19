@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from simplegmail import Gmail
 from simplegmail.message import Message
 from simplegmail.query import construct_query
@@ -6,6 +7,7 @@ from websites import AbstractWebsite, LinkedIn, Indeed, \
     IndeedBlock, ExecutiveJobs, CVJobs
 from log import Logger
 from db import DatabaseConnection
+from jobs import JobListing
 
 __version__ = 0.19
 
@@ -21,11 +23,41 @@ def init_gmail_client():
     return Gmail(client_secret_file="credentials.json")
 
 
+def get_session_websites() -> list[type[AbstractWebsite]]:
+    """
+    Retrieve the class of websites being used in this session 
+    as defined in `config.json`.
+
+    Wrapped in [type] annotation because the objects are not
+    initialised.
+    """
+    session_websites = config['session_websites']
+    websites = [LinkedIn, Indeed, IndeedBlock, ExecutiveJobs, CVJobs]
+    return [w for w in websites if w.__qualname__ in session_websites]
+
+
+def init_website_wrappers(
+        session_websites: list[type[AbstractWebsite]], 
+        sorted_jobs: dict[str, JobListing] | None = None
+    ) -> list[AbstractWebsite]:
+    """
+    Initialise website wrappers for the current session
+    """
+    args = (config, logger, db)
+    if sorted_jobs is None:
+        return [w(*args) for w in session_websites]
+    websites = []
+    for email, jobs in sorted_jobs.items():
+        w = next(w for w in session_websites if w.alert_email() == email)
+        websites.append(w(*args, jobs))
+    return websites
+
+
 def get_alert_emails(websites: list[AbstractWebsite]) -> list[str]:
     """
     Retrieve the email string for each website being used in the session
     """
-    return [w.alert_email for w in websites]
+    return [w.alert_email() for w in websites]
 
 
 def get_job_alert_mail(gmail: Gmail, emails: list[str]):
@@ -36,7 +68,7 @@ def get_job_alert_mail(gmail: Gmail, emails: list[str]):
     for email in emails:
         query_params.append({
             'sender': email,
-            'newer_than': (5, "day")
+            'newer_than': (config['email_check_age'], "day")
         })
     logger.log("Retrieving messages...")
     messages = gmail.get_messages(query=construct_query(*query_params))
@@ -55,8 +87,38 @@ def sort_messages(messages: list[Message], websites: list[AbstractWebsite]):
                 continue
 
 
+def sort_jobs(jobs: list[JobListing]) -> dict[str, JobListing]:
+    """
+    Sort retrieved jobs into a dict with email as key
+    """
+    jobs_dict = defaultdict(list)
+    for job in jobs:
+        jobs_dict[job.email].append(job)
+    return jobs_dict
+
+
+def find_new_jobs():
+    logger.log("Finding new jobs")
+    gmail = init_gmail_client()
+    session_websites = get_session_websites()
+    websites = init_website_wrappers(session_websites)
+    emails = get_alert_emails(websites)
+    messages = get_job_alert_mail(gmail, emails)
+    sort_messages(messages, websites)
+    for website in websites:
+        website.find_all_jobs()
+
+
+def apply_for_jobs():
+    logger.log("Applying for jobs")
+    session_websites = get_session_websites()
+    emails = get_alert_emails(session_websites)
+    unapplied_jobs = db.retrieve_unapplied_jobs(emails)
+    sorted_jobs = sort_jobs(unapplied_jobs)
+    websites = init_website_wrappers(session_websites, sorted_jobs)
+
+
 def main():
-    # easier than passing them around
     global config
     global logger
     global db
@@ -68,22 +130,11 @@ def main():
     with Logger(log_file) as logger:
         mode = "Production" if in_production else "Development"
         logger.log(f'Job-Search-Automate-v3 version {__version__}, "{mode} Mode"')
-        with DatabaseConnection(logger) as db:
-            gmail = init_gmail_client()
-            # initialise website class wrappers
-            args = (config, logger, db)
-            websites: list[AbstractWebsite] = [
-                LinkedIn(*args),
-                Indeed(*args),
-                IndeedBlock(*args),
-                ExecutiveJobs(*args),
-                CVJobs(*args)
-            ]
-            emails = get_alert_emails(websites)
-            messages = get_job_alert_mail(gmail, emails)
-            sort_messages(messages, websites)
-            for website in websites:
-                website.find_all_jobs()
+        with DatabaseConnection(logger, config) as db:
+            if config['find_new_jobs']:
+                find_new_jobs()
+            if config['apply_for_jobs']:
+                apply_for_jobs()
 
 
 if __name__ == '__main__':
