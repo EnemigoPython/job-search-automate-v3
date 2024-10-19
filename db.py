@@ -82,6 +82,7 @@ class DatabaseConnection:
     @staticmethod
     def row_to_job_listing(row: DatabaseRow):
         return JobListing(
+            row.ID,
             row.title,
             row.company,
             row.location,

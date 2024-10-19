@@ -44,5 +44,6 @@
         "Remote",
         "Oxford",
         "Cambridge"
-    ]
+    ],
+    "headless": false
 }

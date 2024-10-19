@@ -29,7 +29,7 @@ class Logger:
         else:
             self._log("Script ran to completion: exiting\n")
         self._logger.handlers.clear()
-
+    
     def log(self, msg: str, level=LogLevel.INFO):
         """External interface to call the logger with the caller filename"""
         caller = Path(traceback.extract_stack()[-2].filename).name

@@ -8,8 +8,9 @@ from websites import AbstractWebsite, LinkedIn, Indeed, \
 from log import Logger
 from db import DatabaseConnection
 from jobs import JobListing
+from driver import Driver
 
-__version__ = 0.19
+__version__ = 0.21
 
 
 def load_config() -> dict:
@@ -38,7 +39,8 @@ def get_session_websites() -> list[type[AbstractWebsite]]:
 
 def init_website_wrappers(
         session_websites: list[type[AbstractWebsite]], 
-        sorted_jobs: dict[str, JobListing] | None = None
+        sorted_jobs: dict[str, list[JobListing]] | None = None,
+        driver: Driver | None = None
     ) -> list[AbstractWebsite]:
     """
     Initialise website wrappers for the current session
@@ -49,7 +51,7 @@ def init_website_wrappers(
     websites = []
     for email, jobs in sorted_jobs.items():
         w = next(w for w in session_websites if w.alert_email() == email)
-        websites.append(w(*args, jobs))
+        websites.append(w(*args, jobs, driver))
     return websites
 
 
@@ -87,7 +89,7 @@ def sort_messages(messages: list[Message], websites: list[AbstractWebsite]):
                 continue
 
 
-def sort_jobs(jobs: list[JobListing]) -> dict[str, JobListing]:
+def sort_jobs(jobs: list[JobListing]) -> dict[str, list[JobListing]]:
     """
     Sort retrieved jobs into a dict with email as key
     """
@@ -115,7 +117,10 @@ def apply_for_jobs():
     emails = get_alert_emails(session_websites)
     unapplied_jobs = db.retrieve_unapplied_jobs(emails)
     sorted_jobs = sort_jobs(unapplied_jobs)
-    websites = init_website_wrappers(session_websites, sorted_jobs)
+    with Driver(config, logger) as driver:
+        websites = init_website_wrappers(session_websites, sorted_jobs, driver)
+        for website in websites:
+            website.apply_for_all_jobs()
 
 
 def main():

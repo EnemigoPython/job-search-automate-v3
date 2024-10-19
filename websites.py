@@ -1,10 +1,12 @@
 import re
+import traceback
 from abc import ABC, abstractmethod
 from simplegmail.message import Message
 from bs4 import BeautifulSoup, Tag, NavigableString
 from jobs import JobListing
 from log import Logger, LogLevel
 from db import DatabaseConnection
+from driver import Driver
 
 class AbstractWebsite(ABC):
     """
@@ -15,16 +17,15 @@ class AbstractWebsite(ABC):
             config: dict,
             logger: Logger,
             db: DatabaseConnection,
-            jobs: list[JobListing] | None = None
-        ):
+            jobs: list[JobListing] | None = None,
+            driver: Driver | None = None
+    ):
         self.config = config
         self.logger = logger
         self.db = db
+        self.jobs = jobs or []
+        self.driver = driver
         self.messages = []
-        if jobs is None:
-            self.jobs = []
-        else:
-            self.jobs = jobs
         num_jobs = len(self.jobs)
         self.logger.log(f'Initialised website wrapper: {self} with {num_jobs} jobs.')
         super().__init__()
@@ -127,6 +128,32 @@ class AbstractWebsite(ABC):
         Retrieve job listings from the email
         """
         ...
+    
+    def apply_for_all_jobs(self):
+        """
+        Loop through and apply to all jobs
+        """
+        if self.driver is None:
+            raise AttributeError(f"No driver was passed to {self}")
+        if not self.automatable():
+            self.logger.log(f"Skipping {self} - marked as not automatable")
+            return
+        self.logger.log(f'Applying for jobs with {self}...')
+        for e, job in enumerate(self.jobs, 1):
+            try:
+                self.logger.log(f"Applying for job {e} of {len(self.jobs)}: ID {job.row_id} in database")
+                self.apply_for_job(job)
+            except Exception as exc:
+                self.logger.log("Error applying for job; dumping trace stack", LogLevel.ERROR)
+                trace_stack = '\n' + ''.join(traceback.format_tb(exc.__traceback__))
+                self.logger.log(trace_stack, LogLevel.ERROR)
+    
+    @abstractmethod
+    def apply_for_job(self, job: JobListing):
+        """
+        Apply for a job using link
+        """
+        ...
 
 class LinkedIn(AbstractWebsite):
     @staticmethod
@@ -149,6 +176,7 @@ class LinkedIn(AbstractWebsite):
         easy_apply = 'Easy Apply' in text
         salary = self.extract_salary(text)
         return JobListing(
+            None,
             title, 
             company, 
             location, 
@@ -174,6 +202,13 @@ class LinkedIn(AbstractWebsite):
                     )
             except AttributeError:
                 continue
+    
+    def apply_for_job(self, job: JobListing):
+        """
+        Apply for a job using link
+        """
+        self.driver.get(job.link)
+        self.driver.sleep(20)
 
 class Indeed(AbstractWebsite):
     @staticmethod
@@ -200,6 +235,7 @@ class Indeed(AbstractWebsite):
         location = job_table.find_all('p')[1].get_text().strip()
         salary = self.extract_salary(job_table.get_text())
         job_listing = JobListing(
+            None,
             job_title,
             company,
             location,
@@ -211,6 +247,12 @@ class Indeed(AbstractWebsite):
             False
         )
         self.jobs.append(job_listing)
+    
+    def apply_for_job(self, job: JobListing):
+        """
+        Apply for a job using link
+        """
+        ...
     
 class IndeedBlock(AbstractWebsite):
     @staticmethod
@@ -265,6 +307,7 @@ class IndeedBlock(AbstractWebsite):
                 salary = self.extract_salary(job_section.get_text())
                 link = a_tag['href']
                 job_listing = JobListing(
+                    None,
                     job_title,
                     company,
                     location,
@@ -276,6 +319,12 @@ class IndeedBlock(AbstractWebsite):
                     easy_apply
                 )
                 self.jobs.append(job_listing)
+    
+    def apply_for_job(self, job: JobListing):
+        """
+        Apply for a job using link
+        """
+        ...
 
 class ExecutiveJobs(AbstractWebsite):
     @staticmethod
@@ -305,6 +354,7 @@ class ExecutiveJobs(AbstractWebsite):
                     new_listing = True
                     if job_title and link and location and description:
                         job_listing = JobListing(
+                            None,
                             job_title,
                             None,
                             location,
@@ -326,6 +376,12 @@ class ExecutiveJobs(AbstractWebsite):
                     description += section.get_text()
             except IndexError:
                 continue
+    
+    def apply_for_job(self, job: JobListing):
+        """
+        Apply for a job using link
+        """
+        ...
 
 class CVJobs(AbstractWebsite):
     @staticmethod
@@ -360,6 +416,7 @@ class CVJobs(AbstractWebsite):
                 location = p_text[0]
                 description = p_text[1]
             job_listing = JobListing(
+                None,
                 job_title,
                 None,
                 location,
@@ -371,3 +428,9 @@ class CVJobs(AbstractWebsite):
                 False
             )
             self.jobs.append(job_listing)
+    
+    def apply_for_job(self, job: JobListing):
+        """
+        Apply for a job using link
+        """
+        print(0 / 0)
