@@ -10,7 +10,7 @@ from db import DatabaseConnection
 from jobs import JobListing
 from driver import Driver
 
-__version__ = 0.21
+__version__ = 0.26
 
 
 def load_config() -> dict:
@@ -29,7 +29,7 @@ def get_session_websites() -> list[type[AbstractWebsite]]:
     Retrieve the class of websites being used in this session 
     as defined in `config.json`.
 
-    Wrapped in [type] annotation because the objects are not
+    Wrapped in `[type]` annotation because the objects are not
     initialised.
     """
     session_websites = config['session_websites']

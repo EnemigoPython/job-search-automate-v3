@@ -36,6 +36,8 @@ class DatabaseConnection:
         self.config = config
         self.conn = sqlite3.connect(self.DB_PATH)
         self.conn.row_factory = sqlite3.Row
+        # we will save rows when we load data from the DB for internal lookup
+        self._rows: list[DatabaseRow]
     
     def __enter__(self):
         self.logger.log(f"Connected to {self.DB_PATH}")
@@ -120,7 +122,49 @@ class DatabaseConnection:
                 AND apply_attempts < {max_retries}
                 AND email in {self._format_emails(emails)}
             """))
-            rows = [DatabaseRow(*i) for i in query]
-            unapplied_jobs = [self.row_to_job_listing(i) for i in rows]
+            self._rows = [DatabaseRow(*i) for i in query]
+            unapplied_jobs = [self.row_to_job_listing(i) for i in self._rows]
             self.logger.log(f"{len(unapplied_jobs)} jobs to apply for")
             return unapplied_jobs
+    
+    def mark_job_listing_as_closed(self, row_id: int):
+        """
+        If a listing is no longer available, set retries to 99 in the database.
+
+        This will be shorthand for "don't try to apply for this one again".
+        """
+        with closing(self.conn.cursor()) as cursor:
+            cursor.execute(f"""
+                UPDATE '{self.TABLE_NAME}' 
+                SET apply_attempts = 99
+                WHERE ID = {row_id}
+            """)
+            self.logger.log(f"Marked row ID {row_id} as closed.")
+            self.conn.commit()
+
+    def increment_apply_attempts(self, row_id: int):
+        db_row = next(i for i in self._rows if i.ID == row_id)
+        incremented_attempts = db_row.apply_attempts + 1
+        with closing(self.conn.cursor()) as cursor:
+            cursor.execute(f"""
+                UPDATE '{self.TABLE_NAME}' 
+                SET apply_attempts = {incremented_attempts}
+                WHERE ID = {row_id}
+            """)
+            self.logger.log(
+                f"Incremented row ID {row_id} attempts to {incremented_attempts}."
+            )
+            self.conn.commit()
+    
+    def mark_job_listing_as_applied(self, row_id: int):
+        """
+        Insert a timestamp in `applied_timestamp` to mark as applied.
+        """
+        with closing(self.conn.cursor()) as cursor:
+            cursor.execute(f"""
+                UPDATE '{self.TABLE_NAME}' 
+                SET applied_timestamp = '{self._get_timestamp()}'
+                WHERE ID = {row_id}
+            """)
+            self.logger.log(f"Marked row ID {row_id} as applied.")
+            self.conn.commit()

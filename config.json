@@ -45,5 +45,6 @@
         "Oxford",
         "Cambridge"
     ],
-    "headless": false
+    "headless": false,
+    "driver_wait": 5
 }

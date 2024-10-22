@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup, Tag, NavigableString
 from jobs import JobListing
 from log import Logger, LogLevel
 from db import DatabaseConnection
-from driver import Driver
+from driver import Driver, By
 
 class AbstractWebsite(ABC):
     """
@@ -39,7 +39,6 @@ class AbstractWebsite(ABC):
         """
         The email address the alert comes from.
         """
-        ...
     
     @staticmethod
     @abstractmethod
@@ -61,6 +60,13 @@ class AbstractWebsite(ABC):
         Are the website links automatable - we assume yes unless overriden.
         """
         return True
+    
+    @staticmethod
+    def support_all_applications() -> bool:
+        """
+        If `True` can apply to jobs even if `easy_apply` is `False`
+        """
+        return False
     
     def generic_filter(self, message: Message) -> bool:
         """
@@ -127,7 +133,6 @@ class AbstractWebsite(ABC):
         """
         Retrieve job listings from the email
         """
-        ...
     
     def apply_for_all_jobs(self):
         """
@@ -140,20 +145,32 @@ class AbstractWebsite(ABC):
             return
         self.logger.log(f'Applying for jobs with {self}...')
         for e, job in enumerate(self.jobs, 1):
+            # if not self.support_all_applications() and not job.easy_apply:
+            #     self.logger.log(
+            #         f"Skipping job {e}: row ID {job.row_id} (application type not supported by {self})"
+            #     )
+            #     continue
             try:
-                self.logger.log(f"Applying for job {e} of {len(self.jobs)}: ID {job.row_id} in database")
+                self.logger.log(
+                    f"Applying for job {e} of {len(self.jobs)}: row ID {job.row_id} in database"
+                )
                 self.apply_for_job(job)
-            except Exception as exc:
-                self.logger.log("Error applying for job; dumping trace stack", LogLevel.ERROR)
-                trace_stack = '\n' + ''.join(traceback.format_tb(exc.__traceback__))
-                self.logger.log(trace_stack, LogLevel.ERROR)
+            except Exception as e:
+                trace_stack = f"""\n {''.join(traceback.format_exception(
+                    type(e), e, e.__traceback__
+                ))}"""
+                self.logger.log(
+                    f"Error applying for job; dumping trace stack: {trace_stack}", 
+                    LogLevel.ERROR
+                )
+                # self.db.increment_apply_attempts(job.row_id)
+            return
     
     @abstractmethod
     def apply_for_job(self, job: JobListing):
         """
         Apply for a job using link
         """
-        ...
 
 class LinkedIn(AbstractWebsite):
     @staticmethod
@@ -203,11 +220,52 @@ class LinkedIn(AbstractWebsite):
             except AttributeError:
                 continue
     
+    def next_button_found(self):
+        self.driver.sleep(3)  # allow page to update
+        return self.driver.wait_until(
+            self.driver.Condition.ELEMENT_FOUND,
+            (By.CSS_SELECTOR, "button[data-easy-apply-next-button=''"),
+            2
+        )
+
     def apply_for_job(self, job: JobListing):
         """
         Apply for a job using link
         """
         self.driver.get(job.link)
+        application_card = self.driver.find_element(By.CSS_SELECTOR, "div.t-14.artdeco-card")
+        try:
+            easy_apply_btn = application_card.find_element(
+                By.CSS_SELECTOR, "button.jobs-apply-button"
+            )
+            self.logger.log("Clicking 'Easy Apply'...")
+            easy_apply_btn.click()
+            while self.next_button_found():
+                self.driver.find_element(
+                    By.CSS_SELECTOR, 
+                    "button[aria-label='Continue to next step']"
+                ).click()
+            self.driver.find_element(
+                By.CSS_SELECTOR, 
+                "button[aria-label='Review your application']"
+            ).click()
+            self.driver.execute_script("document.querySelector('.jobs-easy-apply-modal__content').scroll(0, 1000)")
+            self.driver.find_element(
+                By.CSS_SELECTOR,
+                "label[for='follow-company-checkbox']"
+            ).click()
+            self.driver.find_element(
+                By.CSS_SELECTOR, 
+                "button[aria-label='Submit application']"
+            ).click()
+            self.logger.log("Application complete")
+            self.driver.sleep(10)
+            self.db.mark_job_listing_as_applied(job.row_id)
+
+        except self.driver.Exceptions.NOT_FOUND:
+            self.driver.find_element(By.XPATH, "//span[contains(., 'No longer accepting')]")
+            self.logger.log("Applications for this job have closed.", LogLevel.WARNING)
+            self.db.mark_job_listing_as_closed(job.row_id)
         self.driver.sleep(20)
 
 class Indeed(AbstractWebsite):
@@ -252,7 +310,6 @@ class Indeed(AbstractWebsite):
         """
         Apply for a job using link
         """
-        ...
     
 class IndeedBlock(AbstractWebsite):
     @staticmethod
@@ -324,7 +381,6 @@ class IndeedBlock(AbstractWebsite):
         """
         Apply for a job using link
         """
-        ...
 
 class ExecutiveJobs(AbstractWebsite):
     @staticmethod
@@ -381,7 +437,6 @@ class ExecutiveJobs(AbstractWebsite):
         """
         Apply for a job using link
         """
-        ...
 
 class CVJobs(AbstractWebsite):
     @staticmethod
@@ -433,4 +488,4 @@ class CVJobs(AbstractWebsite):
         """
         Apply for a job using link
         """
-        print(0 / 0)
+        # print(0 / 0)
